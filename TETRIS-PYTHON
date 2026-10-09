@@ -1,14 +1,15 @@
 import curses
 import random
+import time
 
 SHAPES = {
-    'I': ([[1, 1, 1, 1]], 1),                  # Cyan
-    'O': ([[1, 1], [1, 1]], 2),                # Yellow
-    'T': ([[0, 1, 0], [1, 1, 1]], 3),          # Magenta
-    'L': ([[0, 0, 1], [1, 1, 1]], 4),          # White/Orange
-    'J': ([[1, 0, 0], [1, 1, 1]], 5),          # Blue
-    'S': ([[0, 1, 1], [1, 1, 0]], 6),          # Green
-    'Z': ([[1, 1, 0], [0, 1, 1]], 7)           # Red
+    'I': ([[1, 1, 1, 1]], 1),                  
+    'O': ([[1, 1], [1, 1]], 2),                
+    'T': ([[0, 1, 0], [1, 1, 1]], 3),          
+    'L': ([[0, 0, 1], [1, 1, 1]], 4),          
+    'J': ([[1, 0, 0], [1, 1, 1]], 5),          
+    'S': ([[0, 1, 1], [1, 1, 0]], 6),          
+    'Z': ([[1, 1, 0], [0, 1, 1]], 7)           
 }
 
 class Tetris:
@@ -108,29 +109,30 @@ class Tetris:
         return ghost_y
 
 def draw_matrix(stdscr, matrix, offset_x, offset_y, color, is_ghost=False):
-    """Draws a shape on the screen. Multiplies X by 2 for standard terminal grid ratio."""
     for cy, row in enumerate(matrix):
         for cx, cell in enumerate(row):
             if cell:
                 try:
                     if is_ghost:
-                        # Draw ghost piece as colored brackets using foreground colors (pairs 11-17)
                         stdscr.addstr(offset_y + cy, (offset_x + cx) * 2 + 1, "[]", curses.color_pair(color + 10))
                     else:
-                        # Draw solid piece using background colors (pairs 1-7)
                         stdscr.addstr(offset_y + cy, (offset_x + cx) * 2 + 1, "  ", curses.color_pair(color))
                 except curses.error:
                     pass
 
 def main(stdscr):
-    curses.curs_set(0)
+    # Safely attempt to hide the terminal cursor
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
+        
     stdscr.nodelay(True)
-    stdscr.timeout(50) 
+    stdscr.timeout(20) 
     
     curses.start_color()
     curses.use_default_colors()
     
-    # 1-7: Solid block background colors for actual pieces
     curses.init_pair(1, curses.COLOR_WHITE, curses.COLOR_CYAN)
     curses.init_pair(2, curses.COLOR_WHITE, curses.COLOR_YELLOW)
     curses.init_pair(3, curses.COLOR_WHITE, curses.COLOR_MAGENTA)
@@ -139,7 +141,6 @@ def main(stdscr):
     curses.init_pair(6, curses.COLOR_WHITE, curses.COLOR_GREEN)
     curses.init_pair(7, curses.COLOR_WHITE, curses.COLOR_RED)
 
-    # 11-17: Foreground colors for text/ghost pieces with transparent backgrounds
     curses.init_pair(11, curses.COLOR_CYAN, -1)
     curses.init_pair(12, curses.COLOR_YELLOW, -1)
     curses.init_pair(13, curses.COLOR_MAGENTA, -1)
@@ -149,98 +150,106 @@ def main(stdscr):
     curses.init_pair(17, curses.COLOR_RED, -1)
 
     game = Tetris()
-    ticks = 0
+    
+    last_fall_time = time.time()
+    needs_redraw = True # Only redraw when this is True
     
     while not game.game_over:
-        stdscr.clear()
-        
-        fall_speed = max(2, 16 - game.level)
+        fall_speed = max(0.1, 0.8 - (game.level * 0.05))
         
         # 1. Handle Input
         key = stdscr.getch()
-        if key == ord('q'):
-            break
-        elif key == curses.KEY_LEFT:
-            if not game.check_collision(game.current_piece["matrix"], game.x - 1, game.y):
-                game.x -= 1
-        elif key == curses.KEY_RIGHT:
-            if not game.check_collision(game.current_piece["matrix"], game.x + 1, game.y):
-                game.x += 1
-        elif key == curses.KEY_DOWN:
-            if not game.check_collision(game.current_piece["matrix"], game.x, game.y + 1):
-                game.y += 1
-                game.score += 1
-        elif key == curses.KEY_UP:
-            rotated = game.rotate(game.current_piece["matrix"])
-            if not game.check_collision(rotated, game.x, game.y):
-                game.current_piece["matrix"] = rotated
-            elif not game.check_collision(rotated, game.x - 1, game.y):
-                game.current_piece["matrix"] = rotated
-                game.x -= 1
-            elif not game.check_collision(rotated, game.x + 1, game.y):
-                game.current_piece["matrix"] = rotated
-                game.x += 1
-        elif key == ord(' '): 
-            game.hard_drop()
-            ticks = 0
-        elif key in [ord('c'), ord('h')]: 
-            game.hold()
-            ticks = 0
-            
+        if key != -1: 
+            needs_redraw = True # Input detected, trigger redraw
+            if key == ord('q'):
+                break
+            elif key == curses.KEY_LEFT:
+                if not game.check_collision(game.current_piece["matrix"], game.x - 1, game.y):
+                    game.x -= 1
+            elif key == curses.KEY_RIGHT:
+                if not game.check_collision(game.current_piece["matrix"], game.x + 1, game.y):
+                    game.x += 1
+            elif key == curses.KEY_DOWN:
+                if not game.check_collision(game.current_piece["matrix"], game.x, game.y + 1):
+                    game.y += 1
+                    game.score += 1
+            elif key == curses.KEY_UP:
+                rotated = game.rotate(game.current_piece["matrix"])
+                if not game.check_collision(rotated, game.x, game.y):
+                    game.current_piece["matrix"] = rotated
+                elif not game.check_collision(rotated, game.x - 1, game.y):
+                    game.current_piece["matrix"] = rotated
+                    game.x -= 1
+                elif not game.check_collision(rotated, game.x + 1, game.y):
+                    game.current_piece["matrix"] = rotated
+                    game.x += 1
+            elif key == ord(' '): 
+                game.hard_drop()
+                last_fall_time = time.time() 
+            elif key in [ord('c'), ord('h')]: 
+                game.hold()
+                last_fall_time = time.time()
+                
         # 2. Gravity Logic
-        ticks += 1
-        if ticks >= fall_speed:
-            ticks = 0
+        current_time = time.time()
+        if current_time - last_fall_time >= fall_speed:
+            needs_redraw = True # Gravity triggered, trigger redraw
+            last_fall_time = current_time
             if not game.check_collision(game.current_piece["matrix"], game.x, game.y + 1):
                 game.y += 1
             else:
                 game.lock_piece()
 
-        # 3. Render Board Boundaries
-        for y in range(game.height):
-            stdscr.addstr(y, 0, "|")
-            stdscr.addstr(y, game.width * 2 + 1, "|")
-        stdscr.addstr(game.height, 0, "+" + "-" * (game.width * 2) + "+")
-        
-        # 4. Render Locked Pieces
-        for y, row in enumerate(game.board):
-            for x, cell in enumerate(row):
-                if cell:
-                    stdscr.addstr(y, x * 2 + 1, "  ", curses.color_pair(cell))
-                else:
-                    stdscr.addstr(y, x * 2 + 1, " .", curses.A_DIM)
-
-        # 5. Render Ghost Piece
-        ghost_y = game.get_ghost_y()
-        draw_matrix(stdscr, game.current_piece["matrix"], game.x, ghost_y, game.current_piece["color"], is_ghost=True)
-
-        # 6. Render Active Piece
-        draw_matrix(stdscr, game.current_piece["matrix"], game.x, game.y, game.current_piece["color"])
-
-        # 7. Render UI Panels
-        ui_offset_char = game.width * 2 + 5
-        ui_offset_matrix = (ui_offset_char - 1) // 2 
-        
-        stdscr.addstr(0, ui_offset_char, "HOLD (c/h):")
-        if game.hold_piece:
-            draw_matrix(stdscr, game.hold_piece["matrix"], ui_offset_matrix, 1, game.hold_piece["color"])
+        # 3. Render (ONLY if a change occurred)
+        if needs_redraw:
+            stdscr.erase() 
             
-        stdscr.addstr(5, ui_offset_char, f"SCORE: {game.score}")
-        stdscr.addstr(6, ui_offset_char, f"LINES: {game.lines}")
-        stdscr.addstr(7, ui_offset_char, f"LEVEL: {game.level}")
-        
-        stdscr.addstr(9, ui_offset_char, "NEXT:")
-        draw_matrix(stdscr, game.next_piece["matrix"], ui_offset_matrix, 10, game.next_piece["color"])
+            # Render Board Boundaries
+            for y in range(game.height):
+                stdscr.addstr(y, 0, "|")
+                stdscr.addstr(y, game.width * 2 + 1, "|")
+            stdscr.addstr(game.height, 0, "+" + "-" * (game.width * 2) + "+")
+            
+            # Render Locked Pieces
+            for y, row in enumerate(game.board):
+                for x, cell in enumerate(row):
+                    if cell:
+                        stdscr.addstr(y, x * 2 + 1, "  ", curses.color_pair(cell))
+                    else:
+                        stdscr.addstr(y, x * 2 + 1, " .", curses.A_DIM)
 
-        stdscr.addstr(14, ui_offset_char, "CONTROLS:")
-        stdscr.addstr(15, ui_offset_char, "\u2190 \u2192 : Move")
-        stdscr.addstr(16, ui_offset_char, "\u2191   : Rotate")
-        stdscr.addstr(17, ui_offset_char, "\u2193   : Soft Drop")
-        stdscr.addstr(18, ui_offset_char, "SPC : Hard Drop")
-        stdscr.addstr(19, ui_offset_char, "C/H : Hold")
-        stdscr.addstr(20, ui_offset_char, "Q   : Quit")
+            # Render Ghost Piece
+            ghost_y = game.get_ghost_y()
+            draw_matrix(stdscr, game.current_piece["matrix"], game.x, ghost_y, game.current_piece["color"], is_ghost=True)
 
-        stdscr.refresh()
+            # Render Active Piece
+            draw_matrix(stdscr, game.current_piece["matrix"], game.x, game.y, game.current_piece["color"])
+
+            # Render UI Panels
+            ui_offset_char = game.width * 2 + 5
+            ui_offset_matrix = (ui_offset_char - 1) // 2 
+            
+            stdscr.addstr(0, ui_offset_char, "HOLD (c/h):")
+            if game.hold_piece:
+                draw_matrix(stdscr, game.hold_piece["matrix"], ui_offset_matrix, 1, game.hold_piece["color"])
+                
+            stdscr.addstr(5, ui_offset_char, f"SCORE: {game.score}")
+            stdscr.addstr(6, ui_offset_char, f"LINES: {game.lines}")
+            stdscr.addstr(7, ui_offset_char, f"LEVEL: {game.level}")
+            
+            stdscr.addstr(9, ui_offset_char, "NEXT:")
+            draw_matrix(stdscr, game.next_piece["matrix"], ui_offset_matrix, 10, game.next_piece["color"])
+
+            stdscr.addstr(14, ui_offset_char, "CONTROLS:")
+            stdscr.addstr(15, ui_offset_char, "\u2190 \u2192 : Move")
+            stdscr.addstr(16, ui_offset_char, "\u2191   : Rotate")
+            stdscr.addstr(17, ui_offset_char, "\u2193   : Soft Drop")
+            stdscr.addstr(18, ui_offset_char, "SPC : Hard Drop")
+            stdscr.addstr(19, ui_offset_char, "C/H : Hold")
+            stdscr.addstr(20, ui_offset_char, "Q   : Quit")
+
+            stdscr.refresh()
+            needs_redraw = False # Reset flag until next action
 
     stdscr.clear()
     stdscr.addstr(game.height // 2, (game.width * 2) // 2 - 4, "GAME OVER", curses.A_BLINK | curses.color_pair(17))
